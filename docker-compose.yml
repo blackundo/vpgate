@@ -8,8 +8,10 @@ services:
       - POSTGRES_PASSWORD=temporal
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+    expose:
+      - "5432"
+    networks:
+      - internal
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U temporal"]
       interval: 5s
@@ -19,8 +21,8 @@ services:
   temporal:
     image: temporalio/auto-setup:latest
     container_name: temporal
-    ports:
-      - "7233:7233"
+    expose:
+      - "7233"
     environment:
       - TZ=Asia/Ho_Chi_Minh
       - DB=postgres12
@@ -31,18 +33,23 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    networks:
+      - internal
 
   temporal-ui:
     image: temporalio/ui:latest
     container_name: temporal-ui
-    ports:
-      - "8080:8080"
+    expose:
+      - "8080"
     environment:
       - TZ=Asia/Ho_Chi_Minh
       - TEMPORAL_ADDRESS=temporal:7233
-      - TEMPORAL_CORS_ORIGINS=http://localhost:3000
+      - TEMPORAL_CORS_ORIGINS=https://vp.modundo.com
     depends_on:
       - temporal
+    networks:
+      - internal
+      - proxy
 
   vpbank-server:
     build:
@@ -60,8 +67,8 @@ services:
         echo 'Migrations complete. Starting server...' &&
         npm run start
       "
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     environment:
       - TZ=Asia/Ho_Chi_Minh
       - PORT=3000
@@ -92,6 +99,9 @@ services:
         condition: service_healthy
     volumes:
       - ./server/service-account.json:/app/service-account.json
+    networks:
+      - internal
+      - proxy
 
   vpbank-worker:
     build:
@@ -126,6 +136,16 @@ services:
       - net.ipv4.tcp_keepalive_time=60
       - net.ipv4.tcp_keepalive_intvl=10
       - net.ipv4.tcp_keepalive_probes=6
+    networks:
+      - internal
 
 volumes:
   postgres_data:
+
+networks:
+  internal:
+    name: vpgate-internal
+    driver: bridge
+  proxy:
+    external: true
+    name: nginx-proxy-manager_default
