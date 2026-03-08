@@ -12,6 +12,22 @@ const REDOS_UNSAFE_PATTERNS = [
 ];
 
 /**
+ * Normalize a bank transaction note by removing all whitespace.
+ * Banks sometimes insert spaces into codes (e.g., "SHORTCF8D6F 64" → "SHORTCF8D6F64").
+ */
+function normalizeNote(note: string): string {
+  return note.replace(/\s+/g, '');
+}
+
+/**
+ * Match regex against note, falling back to whitespace-stripped note if no match.
+ * This handles cases where banks insert spaces into payment codes.
+ */
+function matchNoteWithRegex(note: string, regex: RegExp): RegExpMatchArray | null {
+  return note.match(regex) ?? normalizeNote(note).match(regex);
+}
+
+/**
  * Returns a safe RegExp for paymentCodeRegex or null if pattern is invalid/dangerous (ReDoS).
  */
 function safePaymentCodeRegex(pattern: string | undefined): RegExp | null {
@@ -46,6 +62,7 @@ export interface WebhookConfig {
   triggerType: 'in' | 'out' | 'both';
   ignoreNoPaymentCode?: boolean;
   paymentCodeRegex?: string;
+  normalizeWhitespace?: boolean;
   enabled: boolean;
   // added new fields
   name?: string;
@@ -97,7 +114,7 @@ export class WebhookService {
       if (config.paymentCodeRegex) {
         const regex = safePaymentCodeRegex(config.paymentCodeRegex);
         if (regex) {
-          const match = tx.note.match(regex);
+          const match = config.normalizeWhitespace ? matchNoteWithRegex(tx.note, regex) : tx.note.match(regex);
           if (!match) return false;
         } else {
           const code = extractPaymentCodeFromNote(tx.note);
@@ -151,8 +168,8 @@ export class WebhookService {
         if (config?.paymentCodeRegex) {
           const regex = safePaymentCodeRegex(config.paymentCodeRegex);
           if (regex) {
-            const match = tx.note.match(regex);
-            if (match) code = match[1] || match[0];
+            const match = config.normalizeWhitespace ? matchNoteWithRegex(tx.note, regex) : tx.note.match(regex);
+            if (match) code = (match[1] || match[0]).replace(/\s+/g, '');
           }
         }
         return code;

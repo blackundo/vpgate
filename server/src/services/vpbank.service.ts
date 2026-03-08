@@ -358,6 +358,7 @@ export class VpbankService {
             authToken: c.authToken, // legacy?
             ignoreNoPaymentCode: c.ignoreNoPaymentCode,
             paymentCodeRegex: c.paymentCodeRegex,
+            normalizeWhitespace: c.normalizeWhitespace,
             filterAccount: c.filterAccount,
             name: c.name,
             type: c.type
@@ -439,6 +440,7 @@ export class VpbankService {
           authToken: c.authToken,
           ignoreNoPaymentCode: c.ignoreNoPaymentCode,
           paymentCodeRegex: c.paymentCodeRegex,
+          normalizeWhitespace: c.normalizeWhitespace,
           filterAccount: c.filterAccount
         },
         isActive: c.enabled
@@ -628,6 +630,7 @@ export class VpbankService {
         headers: data.headers,
         ignoreNoPaymentCode: data.ignoreNoPaymentCode,
         paymentCodeRegex: data.paymentCodeRegex,
+        normalizeWhitespace: data.normalizeWhitespace,
         filterAccount: data.filterAccount,
         name: data.name,
         type: data.type
@@ -656,6 +659,7 @@ export class VpbankService {
     if (data.headers !== undefined) configUpdates.headers = data.headers;
     if (data.ignoreNoPaymentCode !== undefined) configUpdates.ignoreNoPaymentCode = data.ignoreNoPaymentCode;
     if (data.paymentCodeRegex !== undefined) configUpdates.paymentCodeRegex = data.paymentCodeRegex;
+    if (data.normalizeWhitespace !== undefined) configUpdates.normalizeWhitespace = data.normalizeWhitespace;
     if (data.filterAccount !== undefined) configUpdates.filterAccount = data.filterAccount;
     if (data.name !== undefined) configUpdates.name = data.name;
     if (data.type !== undefined) configUpdates.type = data.type;

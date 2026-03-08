@@ -15,6 +15,7 @@ export interface WebhookConfig {
 	triggerType: 'in' | 'out' | 'both';
 	ignoreNoPaymentCode: boolean;
 	paymentCodeRegex: string;
+	normalizeWhitespace: boolean;
 	headers: string; // JSON string
 	config: any;
 	enabled: boolean;
@@ -42,6 +43,7 @@ export const WebhookForm: React.FC<WebhookFormProps> = ({ initialData, onSave, o
 		authType: 'none',
 		triggerType: 'in',
 		ignoreNoPaymentCode: false,
+		normalizeWhitespace: false,
 		...restInitial,
 		headers: headersStr
 	});
@@ -166,13 +168,23 @@ export const WebhookForm: React.FC<WebhookFormProps> = ({ initialData, onSave, o
 					<span className="text-sm">Bỏ qua giao dịch không có nội dung (Payment Code)</span>
 				</label>
 				{data.ignoreNoPaymentCode && (
-					<input
-						type="text"
-						placeholder="Regex Payment Code (VD: MD[0-9]+)"
-						className="w-full px-4 py-2 border rounded-lg text-sm font-mono"
-						value={data.paymentCodeRegex || ''}
-						onChange={e => setData({ ...data, paymentCodeRegex: e.target.value })}
-					/>
+					<div className="pl-6 space-y-2">
+						<input
+							type="text"
+							placeholder="Regex Payment Code (VD: MD[0-9]+)"
+							className="w-full px-4 py-2 border rounded-lg text-sm font-mono"
+							value={data.paymentCodeRegex || ''}
+							onChange={e => setData({ ...data, paymentCodeRegex: e.target.value })}
+						/>
+						<label className="flex items-center gap-2">
+							<input
+								type="checkbox"
+								checked={data.normalizeWhitespace ?? false}
+								onChange={e => setData({ ...data, normalizeWhitespace: e.target.checked })}
+							/>
+							<span className="text-sm text-gray-600">Tự động bỏ khoảng trắng khi khớp mã (xử lý trường hợp ngân hàng chèn dấu cách vào giữa mã)</span>
+						</label>
+					</div>
 				)}
 			</div>
 
