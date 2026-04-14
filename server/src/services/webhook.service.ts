@@ -177,7 +177,7 @@ export class WebhookService {
       content: tx.note,
       transferType: 'in',
       transferAmount: amountVal,
-      description: tx.note,
+      description: config?.normalizeWhitespace ? normalizeNote(tx.note) : tx.note,
     };
   }
 
