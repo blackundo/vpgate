@@ -1,5 +1,5 @@
 // @ts-ignore
-import { register, listen } from '@mr.cuongnt/fcm-node-receiver';
+import { register, listen } from '@blackundo/fcm-node-receiver';
 import { FCMCredential } from '../models/fcm-credential.model';
 
 export interface FCMCredentials {
