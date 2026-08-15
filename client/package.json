@@ -3,16 +3,16 @@
 	"private": true,
 	"version": "0.0.0",
 	"type": "module",
-	"author": "mr.cuongnt",
+	"author": "blackundo",
 	"license": "MIT",
 	"homepage": "https://billgate.xyz",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/cuongdev/billgate"
+		"url": "https://github.com/blackundo/vpgate"
 	},
 	"keywords": ["billgate", "vpbank", "auto bank gateway"],
 	"bugs": {
-		"url": "https://github.com/cuongdev/billgate/issues"
+		"url": "https://github.com/blackundo/vpgate/issues"
 	},
 	"engines": {
 		"node": ">=18.0.0"

@@ -74,7 +74,7 @@ Prerequisites: Node.js >= 18, PostgreSQL, Temporal Server.
 
 1.  **Clone the repository**
     ```bash
-    git clone https://github.com/cuongdev/billgate.git
+    git clone https://github.com/blackundo/vpgate.git
     cd billgate
     ```
 
@@ -93,7 +93,7 @@ Prerequisites: Node.js >= 18, PostgreSQL, Temporal Server.
 
 ## 📈 Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=cuongdev/billgate&type=date&legend=top-left)](https://www.star-history.com/#cuongdev/billgate&type=date&legend=top-left)
+[![Star History Chart](https://api.star-history.com/svg?repos=blackundo/vpgate&type=date&legend=top-left)](https://www.star-history.com/#blackundo/vpgate&type=date&legend=top-left)
 
 ## 📄 License
 
