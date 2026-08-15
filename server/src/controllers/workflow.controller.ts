@@ -3,6 +3,7 @@ import { getTemporalClient } from '../temporal/client';
 import { vpbankService } from '../services/vpbank.service';
 import { SessionRepository } from '../repositories/session.repository';
 import { startWorkflowForSession } from '../services/workflow.service';
+import { pauseSignal, resumeSignal } from '../interfaces/temporal.interfaces';
 
 const sessionRepo = new SessionRepository();
 
@@ -79,19 +80,16 @@ export const pauseWorkflow = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Workflow/Account not found' });
     }
 
-    try {
-      await sessionRepo.update(session.keyShare, {
-        status: 'paused', // Paused/Stopped
-        runId: null
-      }, { userId: req.user.id });
-      const client = await getTemporalClient();
-      const handle = client.workflow.getHandle(workflowId);
+    const client = await getTemporalClient();
+    const handle = client.workflow.getHandle(workflowId);
+    await handle.signal(pauseSignal);
 
-      await handle.signal('delete');
-      console.log(`[WorkflowAPI] Sent delete signal to ${workflowId} for suspension`);
-    } catch (e: any) {
-      console.warn(`[WorkflowAPI] Workflow not running or signal failed: ${e.message}`);
-    }
+    // Persist the state only after Temporal accepted the signal. This prevents
+    // the database from claiming the account is paused while its workflow is active.
+    await sessionRepo.update(session.keyShare, {
+      status: 'paused'
+    }, { userId: req.user.id });
+    console.log(`[WorkflowAPI] Sent pause signal to ${workflowId}`);
 
     return res.json({
       success: true,
@@ -127,7 +125,23 @@ export const resumeWorkflow = async (req: Request, res: Response) => {
         fcmToken: '',
       };
 
-      const runId = await startWorkflowForSession(sessionForWorkflow);
+      let runId: string;
+      try {
+        const client = await getTemporalClient();
+        const handle = client.workflow.getHandle(workflowId);
+        await handle.signal(resumeSignal);
+        const description = await handle.describe();
+        runId = description.runId;
+        console.log(`[WorkflowAPI] Sent resume signal to ${workflowId}`);
+      } catch (error: any) {
+        const workflowNotFound = error?.name === 'WorkflowNotFoundError'
+          || error?.message?.toLowerCase().includes('not found')
+          || error?.message?.toLowerCase().includes('already completed');
+        if (!workflowNotFound) throw error;
+
+        runId = await startWorkflowForSession(sessionForWorkflow);
+        console.log(`[WorkflowAPI] Started replacement workflow ${workflowId}`);
+      }
 
       await sessionRepo.update(session.keyShare, {
         status: 'active',
@@ -161,9 +175,10 @@ export const stopWorkflow = async (req: Request, res: Response) => {
 
     const client = await getTemporalClient();
     const handle = client.workflow.getHandle(workflowId);
-    await handle.signal('stop');
+    await handle.signal(pauseSignal);
+    await sessionRepo.update(session.keyShare, { status: 'paused' }, { userId: req.user.id });
 
-    return res.json({ success: true, message: 'Workflow stop signal sent' });
+    return res.json({ success: true, message: 'Workflow paused', status: 'paused' });
   } catch (error) {
     console.error(`[WorkflowAPI] Stop error for ${req.params.workflowId}:`, error);
     return res.status(500).json({ error: (error as Error).message });
