@@ -36,6 +36,13 @@ interface WorkflowDetail {
 	historyLength: number;
 	lastHeartbeat?: number;
 	lastListenerActivity?: number;
+	healthStatus: 'healthy' | 'delayed' | 'sync_error' | 'initializing' | 'paused';
+	lastFcmConnectedAt?: string | null;
+	lastFcmMessageAt?: string | null;
+	lastSyncAttemptAt?: string | null;
+	lastSyncSuccessAt?: string | null;
+	lastSyncError?: string | null;
+	consecutiveSyncFailures?: number;
 	/** Số tài khoản VPBank (dùng cho VietQR, hiển thị) */
 	accountNumber?: string | null;
 	name?: string | null;
@@ -358,6 +365,18 @@ export const WorkflowDetailPage: React.FC = () => {
 			>
 				<ArrowLeft className="w-4 h-4" /> Quay lại danh sách
 			</button>
+
+			{workflow.status === 'active' && workflow.healthStatus !== 'healthy' && (
+				<div className={`mb-6 rounded-xl border p-4 flex gap-3 ${workflow.healthStatus === 'sync_error' ? 'border-red-200 bg-red-50 text-red-800' : 'border-amber-200 bg-amber-50 text-amber-800'}`}>
+					<Activity className="w-5 h-5 shrink-0 mt-0.5" />
+					<div>
+						<div className="font-semibold">Tài khoản đang không đồng bộ bình thường</div>
+						<div className="text-sm mt-1">
+							{workflow.lastSyncError || (workflow.healthStatus === 'delayed' ? 'Không có lần đồng bộ thành công trong hơn 10 phút.' : 'Đang chờ lần đồng bộ đầu tiên.')}
+						</div>
+					</div>
+				</div>
+			)}
 
 			<div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 				{/* Left Column */}

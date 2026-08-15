@@ -73,6 +73,8 @@ export class FCMListenerManager {
                 this.listeners.set(keyShare, service);
 
                 await service.start(payload => this.handleNotification(keyShare, payload));
+				await sessionRepo.update(keyShare, { lastFcmConnectedAt: new Date() })
+					.catch(error => console.error('[FCMListenerManager] Failed to record connection health', error));
 
                 console.log(
                     `[FCMListenerManager] Listener started for keyShare=${keyShare}. Total listeners=${this.listeners.size}`,
@@ -199,6 +201,11 @@ export class FCMListenerManager {
         console.log(
             `[FCMListenerManager] Received notification keyShare=${keyShare}, fcmMessageId=${fcmMessageId}, listeners=${this.listeners.size}`,
         );
+
+		await sessionRepo.update(keyShare, {
+			lastFcmMessageAt: new Date(),
+			lastListenerActivity: Date.now(),
+		}).catch(error => console.error('[FCMListenerManager] Failed to record message health', error));
 
         if (fcmMessageId !== 'unknown' && this.processedMessageIds.has(fcmMessageId)) {
             console.log(

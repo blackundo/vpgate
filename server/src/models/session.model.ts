@@ -10,6 +10,12 @@ export class Session extends Model {
   public status!: 'active' | 'expired' | 'paused';
   public name!: string | null;
   public lastListenerActivity!: number | null;
+  public lastFcmConnectedAt!: Date | null;
+  public lastFcmMessageAt!: Date | null;
+  public lastSyncAttemptAt!: Date | null;
+  public lastSyncSuccessAt!: Date | null;
+  public lastSyncError!: string | null;
+  public consecutiveSyncFailures!: number;
   public runId!: string | null;
 
   // Foreign Key
@@ -60,6 +66,17 @@ Session.init(
       type: DataTypes.BIGINT,
       allowNull: true,
       field: 'last_listener_activity',
+    },
+    lastFcmConnectedAt: { type: DataTypes.DATE, allowNull: true, field: 'last_fcm_connected_at' },
+    lastFcmMessageAt: { type: DataTypes.DATE, allowNull: true, field: 'last_fcm_message_at' },
+    lastSyncAttemptAt: { type: DataTypes.DATE, allowNull: true, field: 'last_sync_attempt_at' },
+    lastSyncSuccessAt: { type: DataTypes.DATE, allowNull: true, field: 'last_sync_success_at' },
+    lastSyncError: { type: DataTypes.TEXT, allowNull: true, field: 'last_sync_error' },
+    consecutiveSyncFailures: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
+      field: 'consecutive_sync_failures',
     },
     runId: {
       type: DataTypes.STRING,

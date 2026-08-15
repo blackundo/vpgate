@@ -7,6 +7,25 @@ import { pauseSignal, resumeSignal } from '../interfaces/temporal.interfaces';
 
 const sessionRepo = new SessionRepository();
 
+const getHealthStatus = (session: any) => {
+  if (session.status === 'paused') return 'paused';
+  if ((session.consecutiveSyncFailures || 0) >= 3) return 'sync_error';
+  if (!session.lastSyncSuccessAt) return 'initializing';
+  return Date.now() - new Date(session.lastSyncSuccessAt).getTime() > 10 * 60 * 1000
+    ? 'delayed'
+    : 'healthy';
+};
+
+const healthFields = (session: any) => ({
+  healthStatus: getHealthStatus(session),
+  lastFcmConnectedAt: session.lastFcmConnectedAt,
+  lastFcmMessageAt: session.lastFcmMessageAt,
+  lastSyncAttemptAt: session.lastSyncAttemptAt,
+  lastSyncSuccessAt: session.lastSyncSuccessAt,
+  lastSyncError: session.lastSyncError,
+  consecutiveSyncFailures: session.consecutiveSyncFailures || 0,
+});
+
 export const listWorkflows = async (req: Request, res: Response) => {
   try {
     if (!req.user) throw new Error('User not authenticated');
@@ -27,7 +46,8 @@ export const listWorkflows = async (req: Request, res: Response) => {
       accountNumber: s.accountNumber,
       name: s.name,
       keyShare: s.keyShare,
-      lastListenerActivity: s.lastListenerActivity
+      lastListenerActivity: s.lastListenerActivity,
+      ...healthFields(s)
     }));
 
     return res.json({ workflows: results });
@@ -56,7 +76,8 @@ export const getWorkflowDetails = async (req: Request, res: Response) => {
         accountNumber: session.accountNumber,
         name: session.name,
         keyShare: session.keyShare,
-        lastListenerActivity: session.lastListenerActivity
+        lastListenerActivity: session.lastListenerActivity,
+        ...healthFields(session)
       });
     }
 
