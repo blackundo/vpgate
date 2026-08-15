@@ -8,6 +8,8 @@ interface Workflow {
 	runId: string;
 	status: string;
 	startTime: string;
+	accountNumber?: string | null;
+	keyShare?: string;
 	healthStatus: 'healthy' | 'delayed' | 'sync_error' | 'polling_fcm_error' | 'initializing' | 'paused';
 	syncMode?: 'realtime' | 'polling';
 	lastSyncSuccessAt?: string | null;
@@ -133,7 +135,7 @@ export const WorkflowListPage: React.FC = () => {
 							<div className="mb-4">
 								<div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Số tài khoản</div>
 								<div className="text-lg font-mono font-bold text-gray-800 tracking-tight group-hover:text-blue-600 transition-colors">
-									{wf.workflowId.replace('vpbank-account-', '')}
+									{wf.accountNumber || wf.keyShare || wf.workflowId.replace('vpbank-account-', '')}
 								</div>
 							</div>
 
