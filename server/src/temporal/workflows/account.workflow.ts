@@ -6,6 +6,8 @@ import {
     AccountWorkflowStatus,
     BalanceChangeEventPayload,
     fcmEventSignal,
+    pauseSignal,
+    resumeSignal,
     deleteSignal,
     lastHeartbeatQuery,
     workflowStatusQuery,
@@ -94,6 +96,17 @@ export default async function VPBankAccountWorkflow(initialSession: AccountSessi
         status = 'deleted';
     });
 
+    setHandler(pauseSignal, () => {
+        console.log(`[Workflow] Pause signal received for ${keyShare}`);
+        status = 'paused';
+        signalQueues.length = 0;
+    });
+
+    setHandler(resumeSignal, () => {
+        console.log(`[Workflow] Resume signal received for ${keyShare}`);
+        if (status !== 'deleted') status = 'active';
+    });
+
     setHandler(lastHeartbeatQuery, () => lastPollTime);
     setHandler(workflowStatusQuery, () => getStatus());
 
@@ -107,7 +120,9 @@ export default async function VPBankAccountWorkflow(initialSession: AccountSessi
         if (result.status === 'SUCCESS') {
             lastPollTime = Date.now();
             eventProcessedCount += result.newTransactions.length;
-            await dispatchWebhooks(result.newTransactions, keyShare);
+            if (result.newTransactions.length > 0) {
+                await dispatchWebhooks(result.newTransactions, keyShare);
+            }
         }
     };
 
@@ -130,6 +145,11 @@ export default async function VPBankAccountWorkflow(initialSession: AccountSessi
 
         if (getStatus() === 'deleted') {
             break;
+        }
+
+        if (!isRunning()) {
+            console.log(`[Workflow] Reconciliation skipped while paused for ${keyShare}`);
+            continue;
         }
 
         const reason = receivedSignal && signalQueues.length > 0 ? 'fcm' : 'periodic';

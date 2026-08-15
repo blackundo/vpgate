@@ -57,6 +57,8 @@ export interface SyncResult {
 // Defines the data a signal accepts
 export const fcmEventSignal = defineSignal<[BalanceChangeEventPayload]>('fcmEvent');
 export const updateCredsSignal = defineSignal<[AccountSession]>('updateCreds');
+export const pauseSignal = defineSignal('pause');
+export const resumeSignal = defineSignal('resume');
 export const deleteSignal = defineSignal('delete');
 export const updateWebhooksSignal = defineSignal<[WebhookConfig[]]>('updateWebhooks');
 export const lastHeartbeatQuery = defineQuery<number>('lastHeartbeat');
