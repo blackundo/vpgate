@@ -1,4 +1,4 @@
-import { proxyActivities, setHandler, condition } from '@temporalio/workflow';
+import { proxyActivities, setHandler, condition, patched } from '@temporalio/workflow';
 import {
     AccountSession,
     AccountActivities,
@@ -71,8 +71,16 @@ export default async function VPBankAccountWorkflow(initialSession: AccountSessi
     const getStatus = (): AccountWorkflowStatus => status as AccountWorkflowStatus;
     let signalQueues: BalanceChangeEventPayload[] = [];
     const keyShare = session.keyShare;
+    const reconciliationInterval = '2 minutes';
     console.log(`[Workflow] Workflow started for ${keyShare}`);
-    await startFCMListener(keyShare);
+    try {
+        await startFCMListener(keyShare);
+    } catch (error) {
+        // FCM is an acceleration signal, not a requirement for transaction sync.
+        // Periodic reconciliation below keeps the account up to date when the
+        // reverse-engineered FCM transport is unavailable.
+        console.warn(`[Workflow] FCM listener failed for ${keyShare}; continuing with periodic sync`, error);
+    }
 
     setHandler(fcmEventSignal, (payload: BalanceChangeEventPayload) => {
         console.log(`[Workflow] FCM event received for ${keyShare}`, payload);
@@ -89,29 +97,49 @@ export default async function VPBankAccountWorkflow(initialSession: AccountSessi
     setHandler(lastHeartbeatQuery, () => lastPollTime);
     setHandler(workflowStatusQuery, () => getStatus());
 
+    const syncTransactions = async (reason: 'startup' | 'fcm' | 'periodic') => {
+        console.log(`[Workflow] Synchronizing transactions for ${keyShare}; reason=${reason}`);
+        const result = await fetchAndSaveTransactions(session);
+        console.log(
+            `[Workflow] Sync completed for ${keyShare}; reason=${reason}, newTransactions=${result.newTransactions.length}, status=${result.status}`,
+        );
+
+        if (result.status === 'SUCCESS') {
+            lastPollTime = Date.now();
+            eventProcessedCount += result.newTransactions.length;
+            await dispatchWebhooks(result.newTransactions, keyShare);
+        }
+    };
+
+    // Temporal patching keeps replay deterministic for workflows that were
+    // already running before periodic reconciliation was introduced.
+    const periodicReconciliationEnabled = patched('periodic-reconciliation-v1');
+
+    if (periodicReconciliationEnabled) {
+        // Catch up transactions that arrived while the worker was unavailable.
+        await syncTransactions('startup');
+    }
 
     while (getStatus() !== 'deleted') {
-        await condition(() => (isRunning() && signalQueues.length > 0) || getStatus() === 'deleted');
+        const receivedSignal = periodicReconciliationEnabled
+            ? await condition(
+                () => (isRunning() && signalQueues.length > 0) || getStatus() === 'deleted',
+                reconciliationInterval,
+            )
+            : await condition(() => (isRunning() && signalQueues.length > 0) || getStatus() === 'deleted');
 
         if (getStatus() === 'deleted') {
             break;
         }
 
-        console.log(`[Workflow] Processing ${signalQueues.length} FCM events for ${keyShare}`);
-        // clear the signal queues
+        const reason = receivedSignal && signalQueues.length > 0 ? 'fcm' : 'periodic';
+        console.log(`[Workflow] Processing sync trigger for ${keyShare}; reason=${reason}, queuedSignals=${signalQueues.length}`);
+        // Coalesce all queued FCM signals into one idempotent reconciliation.
         signalQueues.length = 0;
-        const result = await fetchAndSaveTransactions(session);
-        console.log(`[Workflow] FCM event processed for ${keyShare}, new transactions: ${result.newTransactions.length}, status: ${result.status}`);
-        if (result.status === 'SUCCESS') {
-            console.log(`[Workflow] FCM event processed for ${keyShare}, new transactions: ${result.newTransactions.length}`);
-            lastPollTime = Date.now();
-            eventProcessedCount += result.newTransactions.length;
-            await dispatchWebhooks(result.newTransactions, keyShare);
-        }
+        await syncTransactions(reason);
     }
 
     console.log(`[Workflow] Stopping FCM listener for ${keyShare}`);
     await stopFCMListener(keyShare);
     console.log(`[Workflow] Workflow terminated for ${keyShare}`);
 }
-
