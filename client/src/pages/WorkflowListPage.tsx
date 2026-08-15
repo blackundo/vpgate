@@ -8,7 +8,8 @@ interface Workflow {
 	runId: string;
 	status: string;
 	startTime: string;
-	healthStatus: 'healthy' | 'delayed' | 'sync_error' | 'initializing' | 'paused';
+	healthStatus: 'healthy' | 'delayed' | 'sync_error' | 'polling_fcm_error' | 'initializing' | 'paused';
+	syncMode?: 'realtime' | 'polling';
 	lastSyncSuccessAt?: string | null;
 	lastSyncError?: string | null;
 }
@@ -60,6 +61,7 @@ export const WorkflowListPage: React.FC = () => {
 		healthy: 'Đồng bộ bình thường',
 		delayed: 'Đồng bộ đang chậm',
 		sync_error: 'Đồng bộ đang lỗi',
+		polling_fcm_error: 'Polling dự phòng — key FCM lỗi',
 		initializing: 'Đang chờ đồng bộ đầu tiên',
 		paused: 'Đã tạm dừng',
 	}[health] || 'Chưa rõ trạng thái');

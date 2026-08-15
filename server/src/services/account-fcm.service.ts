@@ -1,6 +1,9 @@
 // @ts-ignore
 import { register, listen } from '@blackundo/fcm-node-receiver';
 import { FCMCredential } from '../models/fcm-credential.model';
+import { SessionRepository } from '../repositories/session.repository';
+
+const sessionRepo = new SessionRepository();
 
 export interface FCMCredentials {
     fcm: { token: string; pushSet: string };
@@ -216,6 +219,10 @@ export class AccountFCMService {
                         code: error?.code,
                         message: error?.message,
                     });
+                    sessionRepo.update(this.uniqueId, {
+                        lastFcmErrorAt: new Date(),
+                        lastFcmError: `${error?.code || 'FCM_DECRYPT_ERROR'}: ${error?.message || 'Unable to decrypt FCM message'}`.slice(0, 1000),
+                    }).catch(healthError => console.error(`[FCM:${this.uniqueId}] Failed to record decrypt health`, healthError));
                     persistPersistentId(persistentId);
                 });
 

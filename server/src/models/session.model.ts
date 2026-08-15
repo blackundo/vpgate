@@ -12,6 +12,8 @@ export class Session extends Model {
   public lastListenerActivity!: number | null;
   public lastFcmConnectedAt!: Date | null;
   public lastFcmMessageAt!: Date | null;
+  public lastFcmErrorAt!: Date | null;
+  public lastFcmError!: string | null;
   public lastSyncAttemptAt!: Date | null;
   public lastSyncSuccessAt!: Date | null;
   public lastSyncError!: string | null;
@@ -69,6 +71,8 @@ Session.init(
     },
     lastFcmConnectedAt: { type: DataTypes.DATE, allowNull: true, field: 'last_fcm_connected_at' },
     lastFcmMessageAt: { type: DataTypes.DATE, allowNull: true, field: 'last_fcm_message_at' },
+    lastFcmErrorAt: { type: DataTypes.DATE, allowNull: true, field: 'last_fcm_error_at' },
+    lastFcmError: { type: DataTypes.TEXT, allowNull: true, field: 'last_fcm_error' },
     lastSyncAttemptAt: { type: DataTypes.DATE, allowNull: true, field: 'last_sync_attempt_at' },
     lastSyncSuccessAt: { type: DataTypes.DATE, allowNull: true, field: 'last_sync_success_at' },
     lastSyncError: { type: DataTypes.TEXT, allowNull: true, field: 'last_sync_error' },

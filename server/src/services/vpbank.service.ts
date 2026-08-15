@@ -528,6 +528,8 @@ export class VpbankService {
       lastListenerActivity: Number(s.lastListenerActivity),
       lastFcmConnectedAt: s.lastFcmConnectedAt,
       lastFcmMessageAt: s.lastFcmMessageAt,
+      lastFcmErrorAt: s.lastFcmErrorAt,
+      lastFcmError: s.lastFcmError,
       lastSyncAttemptAt: s.lastSyncAttemptAt,
       lastSyncSuccessAt: s.lastSyncSuccessAt,
       lastSyncError: s.lastSyncError,

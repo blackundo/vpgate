@@ -3,12 +3,20 @@ import { getTemporalClient } from '../temporal/client';
 import { vpbankService } from '../services/vpbank.service';
 import { SessionRepository } from '../repositories/session.repository';
 import { startWorkflowForSession } from '../services/workflow.service';
-import { pauseSignal, resumeSignal } from '../interfaces/temporal.interfaces';
+import { deleteSignal, pauseSignal, resumeSignal } from '../interfaces/temporal.interfaces';
+import { AccountFCMService } from '../services/account-fcm.service';
+import { FCMCredential } from '../models/fcm-credential.model';
+import { WebhookRepository } from '../repositories/webhook.repository';
+import { sequelize } from '../db/sequelize';
 
 const sessionRepo = new SessionRepository();
+const webhookRepo = new WebhookRepository();
 
 const getHealthStatus = (session: any) => {
   if (session.status === 'paused') return 'paused';
+  if (session.lastFcmErrorAt && (!session.lastFcmMessageAt || new Date(session.lastFcmErrorAt) > new Date(session.lastFcmMessageAt))) {
+    return 'polling_fcm_error';
+  }
   if ((session.consecutiveSyncFailures || 0) >= 3) return 'sync_error';
   if (!session.lastSyncSuccessAt) return 'initializing';
   return Date.now() - new Date(session.lastSyncSuccessAt).getTime() > 10 * 60 * 1000
@@ -20,6 +28,11 @@ const healthFields = (session: any) => ({
   healthStatus: getHealthStatus(session),
   lastFcmConnectedAt: session.lastFcmConnectedAt,
   lastFcmMessageAt: session.lastFcmMessageAt,
+  lastFcmErrorAt: session.lastFcmErrorAt,
+  lastFcmError: session.lastFcmError,
+  syncMode: session.lastFcmErrorAt && (!session.lastFcmMessageAt || new Date(session.lastFcmErrorAt) > new Date(session.lastFcmMessageAt))
+    ? 'polling'
+    : 'realtime',
   lastSyncAttemptAt: session.lastSyncAttemptAt,
   lastSyncSuccessAt: session.lastSyncSuccessAt,
   lastSyncError: session.lastSyncError,
@@ -60,9 +73,10 @@ export const listWorkflows = async (req: Request, res: Response) => {
 export const getWorkflowDetails = async (req: Request, res: Response) => {
   try {
     if (!req.user) throw new Error('User not authenticated');
+    const userId = req.user.id;
     const { workflowId } = req.params;
 
-    const sessions = await vpbankService.getSessions(req.user.id);
+    const sessions = await vpbankService.getSessions(userId);
     const session = sessions.find(s => `vpbank-account-${s.keyShare.replace(/[^a-z0-9]/gi, '-')}` === workflowId);
 
     if (session) {
@@ -236,6 +250,7 @@ export const getWorkflowHistory = async (req: Request, res: Response) => {
 export const updateCredentials = async (req: Request, res: Response) => {
   try {
     if (!req.user) throw new Error('User not authenticated');
+    const userId = req.user.id;
     const { workflowId } = req.params;
     const { keyShare, pinShare } = req.body;
 
@@ -243,20 +258,85 @@ export const updateCredentials = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Missing keyShare or pinShare' });
     }
 
-    const sessions = await vpbankService.getSessions(req.user.id);
+    const sessions = await vpbankService.getSessions(userId);
     const session = sessions.find(s => `vpbank-account-${s.keyShare.replace(/[^a-z0-9]/gi, '-')}` === workflowId);
     if (!session) {
       return res.status(404).json({ error: 'Workflow/Session not found or access denied' });
     }
 
+    const conflictingSession = await sessionRepo.findByKeyShare(keyShare);
+    if (conflictingSession && conflictingSession.id !== session.id) {
+      return res.status(409).json({ error: 'Key Share is already used by another account' });
+    }
+
+    // Validate before mutating the existing account. A new key gets a fresh FCM
+    // registration, which also replaces stale encryption material.
+    const fcm = new AccountFCMService(keyShare);
+    const credentials = await fcm.getCredentials();
+    const validation = await vpbankService.validateShare(keyShare, pinShare, credentials.fcm.token);
+    if (validation.status !== '1' || !validation.jwt) {
+      return res.status(400).json({ error: 'VPBank rejected the new Key Share or PIN Share' });
+    }
+
     const client = await getTemporalClient();
-    const handle = client.workflow.getHandle(workflowId);
-    await handle.signal('updateCredsSignal', {
-      keyShare,
-      pinShare
+    try {
+      const handle = client.workflow.getHandle(workflowId);
+      await handle.signal(deleteSignal);
+      await Promise.race([
+        handle.result().catch(() => undefined),
+        new Promise(resolve => setTimeout(resolve, 15_000)),
+      ]);
+    } catch (error: any) {
+      const notFound = error?.name === 'WorkflowNotFoundError' || error?.message?.toLowerCase().includes('not found');
+      if (!notFound) throw error;
+    }
+
+    const oldKeyShare = session.keyShare;
+    await sequelize.transaction(async transaction => {
+      const webhooks = await webhookRepo.findAll(session.id, { transaction });
+      for (const webhook of webhooks) {
+        await webhookRepo.update({
+          config: { ...(webhook.config || {}), filterAccount: [keyShare] },
+        }, { where: { id: webhook.id }, transaction });
+      }
+
+      await sessionRepo.update(oldKeyShare, {
+        keyShare,
+        pinShare,
+        jwt: validation.jwt,
+        status: 'active',
+        runId: null,
+        lastFcmConnectedAt: null,
+        lastFcmMessageAt: null,
+        lastFcmErrorAt: null,
+        lastFcmError: null,
+        lastSyncAttemptAt: null,
+        lastSyncSuccessAt: null,
+        lastSyncError: null,
+        consecutiveSyncFailures: 0,
+      }, { userId, transaction });
     });
 
-    return res.json({ success: true, message: 'Updated credentials signal sent' });
+    if (oldKeyShare !== keyShare) {
+      await FCMCredential.destroy({ where: { keyShare: oldKeyShare } });
+    }
+
+    const runId = await startWorkflowForSession({
+      keyShare,
+      pinShare,
+      jwt: validation.jwt,
+      accountNumber: session.accountNumber || '',
+      name: session.name || '',
+      fcmToken: credentials.fcm.token,
+    });
+    await sessionRepo.updateRunId(keyShare, runId, { userId });
+
+    return res.json({
+      success: true,
+      message: 'Credentials updated and listener restarted',
+      workflowId: `vpbank-account-${keyShare.replace(/[^a-z0-9]/gi, '-')}`,
+      runId,
+    });
   } catch (error) {
     console.error(`[WorkflowAPI] Update Creds error for ${req.params.workflowId}:`, error);
     return res.status(500).json({ error: (error as Error).message });
