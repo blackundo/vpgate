@@ -14,7 +14,6 @@ RUN apt-get update && apt-get install -y \
 
 # Copy package files from server directory
 COPY server/package*.json ./
-COPY server/patches ./patches
 
 # Install dependencies (native modules built in container)
 RUN npm install
