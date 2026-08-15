@@ -108,6 +108,7 @@ services:
       context: .
       dockerfile: server/Dockerfile
     container_name: vpbank-worker
+    restart: unless-stopped
     command: npm run worker
     environment:
       - TZ=Asia/Ho_Chi_Minh

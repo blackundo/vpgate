@@ -158,6 +158,16 @@ export class AccountFCMService {
             this.isListening = true;
 
             try {
+                const persistPersistentId = (persistentId?: string) => {
+                    if (!persistentId || creds.persistentIds.includes(persistentId)) return;
+
+                    creds.persistentIds.push(persistentId);
+                    this.cleanupPersistentIds(creds);
+                    this.saveCreds(creds).catch((err) => {
+                        console.error(`[FCM:${this.uniqueId}] Failed to save persistentId`, err);
+                    });
+                };
+
                 const client = await listen(creds, ({ notification, persistentId }: any) => {
                     // persistentId dedupe
                     if (persistentId && creds.persistentIds.includes(persistentId)) {
@@ -171,11 +181,7 @@ export class AccountFCMService {
                         console.log(`[FCM:${this.uniqueId}] Skipping duplicate fcmMessageId=${fcmMessageId}`);
 
                         // Still persist persistentId so we don't re-process later
-                        if (persistentId && !creds.persistentIds.includes(persistentId)) {
-                            creds.persistentIds.push(persistentId);
-                            this.cleanupPersistentIds(creds);
-                            this.saveCreds(creds).catch(() => { });
-                        }
+                        persistPersistentId(persistentId);
                         return;
                     }
 
@@ -203,13 +209,14 @@ export class AccountFCMService {
                     }
 
                     // Track + persist persistentId
-                    if (persistentId && !creds.persistentIds.includes(persistentId)) {
-                        creds.persistentIds.push(persistentId);
-                        this.cleanupPersistentIds(creds);
-                        this.saveCreds(creds).catch((err) => {
-                            console.error(`[FCM:${this.uniqueId}] Failed to save persistentId`, err);
-                        });
-                    }
+                    persistPersistentId(persistentId);
+                }, ({ persistentId, error }: any) => {
+                    console.warn(`[FCM:${this.uniqueId}] Dropped undecryptable message`, {
+                        persistentId,
+                        code: error?.code,
+                        message: error?.message,
+                    });
+                    persistPersistentId(persistentId);
                 });
 
                 this.client = client;

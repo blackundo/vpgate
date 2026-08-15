@@ -9,7 +9,11 @@
 		"type": "git",
 		"url": "https://github.com/cuongdev/billgate"
 	},
-	"keywords": ["billgate", "vpbank", "auto bank gateway"],
+	"keywords": [
+		"billgate",
+		"vpbank",
+		"auto bank gateway"
+	],
 	"bugs": {
 		"url": "https://github.com/cuongdev/billgate/issues"
 	},
@@ -17,6 +21,7 @@
 		"node": ">=18.0.0"
 	},
 	"scripts": {
+		"postinstall": "patch-package",
 		"start": "ts-node --transpile-only -r dotenv/config src/index.ts",
 		"dev": "nodemon --exec \"ts-node --transpile-only -r dotenv/config src/index.ts\"",
 		"gateway": "ts-node --transpile-only src/temporal/gateway.ts",
@@ -25,7 +30,7 @@
 		"check-naming": "./scripts/check-naming.sh"
 	},
 	"dependencies": {
-		"@mr.cuongnt/fcm-node-receiver": "^2.2.0",
+		"@mr.cuongnt/fcm-node-receiver": "2.2.0",
 		"@temporalio/activity": "^1.14.1",
 		"@temporalio/client": "^1.14.1",
 		"@temporalio/worker": "^1.14.1",
@@ -57,6 +62,7 @@
 		"@types/sequelize": "^4.28.20",
 		"@types/sqlite3": "^3.1.11",
 		"@types/uuid": "^10.0.0",
+		"patch-package": "8.0.0",
 		"sequelize-cli": "^6.6.5",
 		"ts-node": "^10.9.2",
 		"typescript": "^5.4.5"
