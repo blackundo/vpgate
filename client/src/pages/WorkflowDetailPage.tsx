@@ -36,9 +36,12 @@ interface WorkflowDetail {
 	historyLength: number;
 	lastHeartbeat?: number;
 	lastListenerActivity?: number;
-	healthStatus: 'healthy' | 'delayed' | 'sync_error' | 'initializing' | 'paused';
+	healthStatus: 'healthy' | 'delayed' | 'sync_error' | 'polling_fcm_error' | 'initializing' | 'paused';
+	syncMode?: 'realtime' | 'polling';
 	lastFcmConnectedAt?: string | null;
 	lastFcmMessageAt?: string | null;
+	lastFcmErrorAt?: string | null;
+	lastFcmError?: string | null;
 	lastSyncAttemptAt?: string | null;
 	lastSyncSuccessAt?: string | null;
 	lastSyncError?: string | null;
@@ -71,6 +74,13 @@ interface Transaction {
 	createdAt: number | string;
 }
 
+interface WorkflowOption {
+	workflowId: string;
+	keyShare: string;
+	accountNumber?: string | null;
+	name?: string | null;
+}
+
 
 
 export const WorkflowDetailPage: React.FC = () => {
@@ -98,6 +108,14 @@ export const WorkflowDetailPage: React.FC = () => {
 	const [loading, setLoading] = useState(true);
 
 	const [showAddWebhook, setShowAddWebhook] = useState(false);
+	const [showCopyWebhook, setShowCopyWebhook] = useState(false);
+	const [showCredentials, setShowCredentials] = useState(false);
+	const [newKeyShare, setNewKeyShare] = useState('');
+	const [newPinShare, setNewPinShare] = useState('');
+	const [savingCredentials, setSavingCredentials] = useState(false);
+	const [copyTarget, setCopyTarget] = useState('');
+	const [copyingWebhooks, setCopyingWebhooks] = useState(false);
+	const [workflowOptions, setWorkflowOptions] = useState<WorkflowOption[]>([]);
 	const [editingWebhook, setEditingWebhook] = useState<WebhookConfig | undefined>(
 		undefined
 	);
@@ -191,6 +209,12 @@ export const WorkflowDetailPage: React.FC = () => {
 			const wfData: WorkflowDetail = await wfRes.json();
 			setWorkflow(wfData);
 			setIsPaused(wfData.status === 'paused');
+
+			const workflowsRes = await apiFetch('/api/workflows');
+			if (workflowsRes.ok) {
+				const workflowsData = await workflowsRes.json();
+				setWorkflowOptions(workflowsData.workflows || []);
+			}
 
 			const accId = wfData.workflowId.replace('vpbank-account-', '');
 			const keyShare = accId;
@@ -338,6 +362,49 @@ export const WorkflowDetailPage: React.FC = () => {
 		}
 	};
 
+	const handleCopyWebhooks = async () => {
+		if (!accountId || !copyTarget) return;
+		setCopyingWebhooks(true);
+		try {
+			const res = await apiFetch('/api/vpbank/webhooks/copy', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ sourceKeyShare: accountId, targetKeyShare: copyTarget }),
+			});
+			const data = await res.json();
+			if (!res.ok) throw new Error(data.error || 'Không thể sao chép webhook');
+			success(`Đã sao chép ${data.copied} webhook${data.skipped ? `, bỏ qua ${data.skipped} cấu hình trùng` : ''}.`);
+			setShowCopyWebhook(false);
+			setCopyTarget('');
+		} catch (err: any) {
+			error(err?.message || 'Không thể sao chép webhook');
+		} finally {
+			setCopyingWebhooks(false);
+		}
+	};
+
+	const handleUpdateCredentials = async () => {
+		if (!id || !newKeyShare.trim() || !newPinShare.trim()) return;
+		setSavingCredentials(true);
+		try {
+			const res = await apiFetch(`/api/workflows/${id}/credentials`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ keyShare: newKeyShare.trim(), pinShare: newPinShare.trim() }),
+			});
+			const data = await res.json();
+			if (!res.ok) throw new Error(data.error || 'Không thể cập nhật key');
+			success('Đã xác thực key mới và khởi động lại tài khoản.');
+			setShowCredentials(false);
+			setNewPinShare('');
+			navigate(`/workflows/${data.workflowId}`, { replace: true });
+		} catch (err: any) {
+			error(err?.message || 'Không thể cập nhật key');
+		} finally {
+			setSavingCredentials(false);
+		}
+	};
+
 
 
 
@@ -372,7 +439,9 @@ export const WorkflowDetailPage: React.FC = () => {
 					<div>
 						<div className="font-semibold">Tài khoản đang không đồng bộ bình thường</div>
 						<div className="text-sm mt-1">
-							{workflow.lastSyncError || (workflow.healthStatus === 'delayed' ? 'Không có lần đồng bộ thành công trong hơn 10 phút.' : 'Đang chờ lần đồng bộ đầu tiên.')}
+							{workflow.healthStatus === 'polling_fcm_error'
+								? `Đang chạy bằng polling dự phòng vì key FCM không hợp lệ. ${workflow.lastFcmError || ''}`
+								: workflow.lastSyncError || (workflow.healthStatus === 'delayed' ? 'Không có lần đồng bộ thành công trong hơn 10 phút.' : 'Đang chờ lần đồng bộ đầu tiên.')}
 						</div>
 					</div>
 				</div>
@@ -646,6 +715,29 @@ export const WorkflowDetailPage: React.FC = () => {
 
 							{activeTab === 'settings' && (
 								<div className="space-y-8">
+									<div className={`rounded-xl border p-4 ${workflow.syncMode === 'polling' ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}>
+										<div className="flex items-center justify-between gap-4">
+											<div>
+												<h3 className="font-bold text-gray-900 flex items-center gap-2"><Activity className="w-4 h-4" /> Chế độ nhận giao dịch</h3>
+												<p className="text-sm mt-1 text-gray-700">{workflow.syncMode === 'polling' ? 'Polling dự phòng (FCM key đang lỗi, giao dịch có thể trễ khoảng 2 phút)' : 'Realtime qua FCM, kèm polling dự phòng'}</p>
+											</div>
+											<button onClick={() => { setNewKeyShare(accountId); setShowCredentials(true); }} className="px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium whitespace-nowrap">Sửa Key / PIN</button>
+										</div>
+									</div>
+
+									{showCredentials && (
+										<div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+											<div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+												<div className="flex justify-between items-center mb-4"><h3 className="text-lg font-bold">Cập nhật Key / PIN VPBank</h3><button onClick={() => setShowCredentials(false)}><X className="w-5 h-5" /></button></div>
+												<p className="text-sm text-gray-600 mb-4">Key mới sẽ được xác thực trước. Giao dịch và webhook hiện tại được giữ nguyên.</p>
+												<label className="block text-xs font-medium text-gray-600 mb-1">Key Share</label>
+												<input value={newKeyShare} onChange={e => setNewKeyShare(e.target.value)} className="w-full px-3 py-2 border rounded-lg mb-3 font-mono text-sm" />
+												<label className="block text-xs font-medium text-gray-600 mb-1">PIN Share</label>
+												<input type="password" value={newPinShare} onChange={e => setNewPinShare(e.target.value)} className="w-full px-3 py-2 border rounded-lg mb-5 font-mono text-sm" autoComplete="new-password" />
+												<div className="flex justify-end gap-2"><button onClick={() => setShowCredentials(false)} className="px-4 py-2 text-sm border rounded-lg">Hủy</button><button onClick={handleUpdateCredentials} disabled={!newKeyShare.trim() || !newPinShare.trim() || savingCredentials} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg disabled:opacity-50">{savingCredentials ? 'Đang xác thực...' : 'Xác thực và cập nhật'}</button></div>
+											</div>
+										</div>
+									)}
 									{/* Audio Settings */}
 									<div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
 										<h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
@@ -694,8 +786,16 @@ export const WorkflowDetailPage: React.FC = () => {
 
 									{/* Webhook List */}
 									<div>
-										<div className="flex justify-between items-center mb-4">
+										<div className="flex justify-between items-center mb-4 gap-3">
 											<h3 className="font-bold text-gray-900">Webhook &amp; Tích hợp</h3>
+											<div className="flex items-center gap-2">
+											<button
+												onClick={() => setShowCopyWebhook(true)}
+												disabled={webhooks.length === 0 || workflowOptions.filter(w => w.keyShare !== accountId).length === 0}
+												className="text-sm bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-200 font-medium flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+											>
+												<Copy className="w-4 h-4" /> Sao chép sang
+											</button>
 											<button
 												onClick={() => {
 													setEditingWebhook(undefined);
@@ -705,7 +805,32 @@ export const WorkflowDetailPage: React.FC = () => {
 											>
 												<Plus className="w-4 h-4" /> Thêm Webhook
 											</button>
+											</div>
 										</div>
+
+										{showCopyWebhook && (
+											<div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+												<div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+													<div className="flex justify-between items-center mb-4">
+														<h3 className="text-lg font-bold">Sao chép webhook</h3>
+														<button onClick={() => setShowCopyWebhook(false)} className="p-1 hover:bg-gray-100 rounded"><X className="w-5 h-5" /></button>
+													</div>
+													<p className="text-sm text-gray-600 mb-4">Sao chép {webhooks.length} cấu hình từ tài khoản hiện tại sang:</p>
+													<select value={copyTarget} onChange={e => setCopyTarget(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-5">
+														<option value="">Chọn tài khoản đích</option>
+														{workflowOptions.filter(w => w.keyShare !== accountId).map(w => (
+															<option key={w.keyShare} value={w.keyShare}>{w.name || 'VPBank'} — {w.accountNumber || w.keyShare}</option>
+														))}
+													</select>
+													<div className="flex justify-end gap-2">
+														<button onClick={() => setShowCopyWebhook(false)} className="px-4 py-2 text-sm border rounded-lg">Hủy</button>
+														<button onClick={handleCopyWebhooks} disabled={!copyTarget || copyingWebhooks} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg disabled:opacity-50">
+															{copyingWebhooks ? 'Đang sao chép...' : 'Sao chép'}
+														</button>
+													</div>
+												</div>
+											</div>
+										)}
 
 										{/* Add/Edit Modal */}
 										{showAddWebhook && (

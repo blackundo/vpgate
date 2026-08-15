@@ -8,6 +8,7 @@ router.use(apiLimiter);
 
 router.get('/vpbank/webhooks', requireAuth, WebhookController.getWebhooks);
 router.post('/vpbank/webhooks', requireAuth, WebhookController.createWebhook);
+router.post('/vpbank/webhooks/copy', requireAuth, WebhookController.copyWebhooks);
 router.put('/vpbank/webhooks/:id', requireAuth, WebhookController.updateWebhook);
 router.delete('/vpbank/webhooks/:id', requireAuth, WebhookController.deleteWebhook);
 

@@ -32,6 +32,29 @@ export const createWebhook = async (req: Request, res: Response) => {
     }
 };
 
+export const copyWebhooks = async (req: Request, res: Response) => {
+    try {
+        if (!req.user) throw new Error('User not authenticated');
+        const { sourceKeyShare, targetKeyShare } = req.body;
+        if (!sourceKeyShare || !targetKeyShare) {
+            return res.status(400).json({ error: 'sourceKeyShare and targetKeyShare are required' });
+        }
+        if (sourceKeyShare === targetKeyShare) {
+            return res.status(400).json({ error: 'Source and target accounts must be different' });
+        }
+
+        const result = await vpbankService.copyWebhooks(
+            sourceKeyShare,
+            targetKeyShare,
+            req.user.id,
+        );
+        return res.json({ ...result, message: 'Webhook configs copied' });
+    } catch (error: any) {
+        const denied = error?.message?.includes('not found') || error?.message?.includes('access denied');
+        return res.status(denied ? 403 : 500).json({ error: error.message });
+    }
+};
+
 export const updateWebhook = async (req: Request, res: Response) => {
     try {
         if (!req.user) throw new Error('User not authenticated');

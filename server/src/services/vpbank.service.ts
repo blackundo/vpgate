@@ -528,6 +528,8 @@ export class VpbankService {
       lastListenerActivity: Number(s.lastListenerActivity),
       lastFcmConnectedAt: s.lastFcmConnectedAt,
       lastFcmMessageAt: s.lastFcmMessageAt,
+      lastFcmErrorAt: s.lastFcmErrorAt,
+      lastFcmError: s.lastFcmError,
       lastSyncAttemptAt: s.lastSyncAttemptAt,
       lastSyncSuccessAt: s.lastSyncSuccessAt,
       lastSyncError: s.lastSyncError,
@@ -642,6 +644,50 @@ export class VpbankService {
         type: data.type
       },
       isActive: !!data.enabled
+    });
+  }
+
+  async copyWebhooks(sourceKeyShare: string, targetKeyShare: string, userId: string) {
+    const [source, target] = await Promise.all([
+      this.sessionRepo.findByKeyShare(sourceKeyShare, { userId }),
+      this.sessionRepo.findByKeyShare(targetKeyShare, { userId }),
+    ]);
+    if (!source || !target) throw new Error('Source or target session not found or access denied');
+
+    return await sequelize.transaction(async transaction => {
+      const [sourceWebhooks, targetWebhooks] = await Promise.all([
+        this.webhookRepo.findAll(source.id, { transaction }),
+        this.webhookRepo.findAll(target.id, { transaction }),
+      ]);
+
+      let copied = 0;
+      let skipped = 0;
+      for (const webhook of sourceWebhooks) {
+        const sourceConfig = webhook.config || {};
+        const duplicate = targetWebhooks.some(existing => {
+          const config = existing.config || {};
+          return existing.url === webhook.url
+            && config.name === sourceConfig.name
+            && config.type === sourceConfig.type;
+        });
+        if (duplicate) {
+          skipped += 1;
+          continue;
+        }
+
+        await this.webhookRepo.create({
+          sessionId: target.id,
+          url: webhook.url,
+          config: {
+            ...sourceConfig,
+            filterAccount: [targetKeyShare],
+          },
+          isActive: webhook.isActive,
+        }, { transaction });
+        copied += 1;
+      }
+
+      return { copied, skipped, total: sourceWebhooks.length };
     });
   }
 
@@ -1051,7 +1097,9 @@ export class VpbankService {
       return;
     }
     const userId = session.userId;
-    const configs = (await this.webhookRepo.findAllByUserId(userId) || []).map((w) => ({
+    // Webhooks belong to a session. Scoping dispatch here prevents configs copied
+    // to another account from firing twice for every transaction owned by the user.
+    const configs = (await this.webhookRepo.findAll(session.id) || []).map((w) => ({
       id: w.id,
       url: w.url,
       enabled: w.isActive,

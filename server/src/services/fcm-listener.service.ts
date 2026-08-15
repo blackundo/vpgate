@@ -204,6 +204,8 @@ export class FCMListenerManager {
 
 		await sessionRepo.update(keyShare, {
 			lastFcmMessageAt: new Date(),
+			lastFcmErrorAt: null,
+			lastFcmError: null,
 			lastListenerActivity: Date.now(),
 		}).catch(error => console.error('[FCMListenerManager] Failed to record message health', error));
 

@@ -5,6 +5,8 @@ module.exports = {
 		const sequelize = queryInterface.sequelize;
 		await sequelize.query('ALTER TABLE sessions ADD COLUMN IF NOT EXISTS last_fcm_connected_at TIMESTAMPTZ');
 		await sequelize.query('ALTER TABLE sessions ADD COLUMN IF NOT EXISTS last_fcm_message_at TIMESTAMPTZ');
+		await sequelize.query('ALTER TABLE sessions ADD COLUMN IF NOT EXISTS last_fcm_error_at TIMESTAMPTZ');
+		await sequelize.query('ALTER TABLE sessions ADD COLUMN IF NOT EXISTS last_fcm_error TEXT');
 		await sequelize.query('ALTER TABLE sessions ADD COLUMN IF NOT EXISTS last_sync_attempt_at TIMESTAMPTZ');
 		await sequelize.query('ALTER TABLE sessions ADD COLUMN IF NOT EXISTS last_sync_success_at TIMESTAMPTZ');
 		await sequelize.query('ALTER TABLE sessions ADD COLUMN IF NOT EXISTS last_sync_error TEXT');
@@ -18,6 +20,8 @@ module.exports = {
 		await sequelize.query('ALTER TABLE sessions DROP COLUMN IF EXISTS last_sync_success_at');
 		await sequelize.query('ALTER TABLE sessions DROP COLUMN IF EXISTS last_sync_attempt_at');
 		await sequelize.query('ALTER TABLE sessions DROP COLUMN IF EXISTS last_fcm_message_at');
+		await sequelize.query('ALTER TABLE sessions DROP COLUMN IF EXISTS last_fcm_error');
+		await sequelize.query('ALTER TABLE sessions DROP COLUMN IF EXISTS last_fcm_error_at');
 		await sequelize.query('ALTER TABLE sessions DROP COLUMN IF EXISTS last_fcm_connected_at');
 	},
 };

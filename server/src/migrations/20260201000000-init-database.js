@@ -55,6 +55,8 @@ module.exports = {
 				last_listener_activity BIGINT,
 				last_fcm_connected_at TIMESTAMPTZ,
 				last_fcm_message_at TIMESTAMPTZ,
+				last_fcm_error_at TIMESTAMPTZ,
+				last_fcm_error TEXT,
 				last_sync_attempt_at TIMESTAMPTZ,
 				last_sync_success_at TIMESTAMPTZ,
 				last_sync_error TEXT,
