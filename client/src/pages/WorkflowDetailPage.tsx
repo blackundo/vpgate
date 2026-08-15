@@ -71,6 +71,13 @@ interface Transaction {
 	createdAt: number | string;
 }
 
+interface WorkflowOption {
+	workflowId: string;
+	keyShare: string;
+	accountNumber?: string | null;
+	name?: string | null;
+}
+
 
 
 export const WorkflowDetailPage: React.FC = () => {
@@ -98,6 +105,10 @@ export const WorkflowDetailPage: React.FC = () => {
 	const [loading, setLoading] = useState(true);
 
 	const [showAddWebhook, setShowAddWebhook] = useState(false);
+	const [showCopyWebhook, setShowCopyWebhook] = useState(false);
+	const [copyTarget, setCopyTarget] = useState('');
+	const [copyingWebhooks, setCopyingWebhooks] = useState(false);
+	const [workflowOptions, setWorkflowOptions] = useState<WorkflowOption[]>([]);
 	const [editingWebhook, setEditingWebhook] = useState<WebhookConfig | undefined>(
 		undefined
 	);
@@ -191,6 +202,12 @@ export const WorkflowDetailPage: React.FC = () => {
 			const wfData: WorkflowDetail = await wfRes.json();
 			setWorkflow(wfData);
 			setIsPaused(wfData.status === 'paused');
+
+			const workflowsRes = await apiFetch('/api/workflows');
+			if (workflowsRes.ok) {
+				const workflowsData = await workflowsRes.json();
+				setWorkflowOptions(workflowsData.workflows || []);
+			}
 
 			const accId = wfData.workflowId.replace('vpbank-account-', '');
 			const keyShare = accId;
@@ -335,6 +352,27 @@ export const WorkflowDetailPage: React.FC = () => {
 			fetchData();
 		} catch (err: any) {
 			error(err?.message);
+		}
+	};
+
+	const handleCopyWebhooks = async () => {
+		if (!accountId || !copyTarget) return;
+		setCopyingWebhooks(true);
+		try {
+			const res = await apiFetch('/api/vpbank/webhooks/copy', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ sourceKeyShare: accountId, targetKeyShare: copyTarget }),
+			});
+			const data = await res.json();
+			if (!res.ok) throw new Error(data.error || 'Không thể sao chép webhook');
+			success(`Đã sao chép ${data.copied} webhook${data.skipped ? `, bỏ qua ${data.skipped} cấu hình trùng` : ''}.`);
+			setShowCopyWebhook(false);
+			setCopyTarget('');
+		} catch (err: any) {
+			error(err?.message || 'Không thể sao chép webhook');
+		} finally {
+			setCopyingWebhooks(false);
 		}
 	};
 
@@ -694,8 +732,16 @@ export const WorkflowDetailPage: React.FC = () => {
 
 									{/* Webhook List */}
 									<div>
-										<div className="flex justify-between items-center mb-4">
+										<div className="flex justify-between items-center mb-4 gap-3">
 											<h3 className="font-bold text-gray-900">Webhook &amp; Tích hợp</h3>
+											<div className="flex items-center gap-2">
+											<button
+												onClick={() => setShowCopyWebhook(true)}
+												disabled={webhooks.length === 0 || workflowOptions.filter(w => w.keyShare !== accountId).length === 0}
+												className="text-sm bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-200 font-medium flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+											>
+												<Copy className="w-4 h-4" /> Sao chép sang
+											</button>
 											<button
 												onClick={() => {
 													setEditingWebhook(undefined);
@@ -705,7 +751,32 @@ export const WorkflowDetailPage: React.FC = () => {
 											>
 												<Plus className="w-4 h-4" /> Thêm Webhook
 											</button>
+											</div>
 										</div>
+
+										{showCopyWebhook && (
+											<div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+												<div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+													<div className="flex justify-between items-center mb-4">
+														<h3 className="text-lg font-bold">Sao chép webhook</h3>
+														<button onClick={() => setShowCopyWebhook(false)} className="p-1 hover:bg-gray-100 rounded"><X className="w-5 h-5" /></button>
+													</div>
+													<p className="text-sm text-gray-600 mb-4">Sao chép {webhooks.length} cấu hình từ tài khoản hiện tại sang:</p>
+													<select value={copyTarget} onChange={e => setCopyTarget(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-5">
+														<option value="">Chọn tài khoản đích</option>
+														{workflowOptions.filter(w => w.keyShare !== accountId).map(w => (
+															<option key={w.keyShare} value={w.keyShare}>{w.name || 'VPBank'} — {w.accountNumber || w.keyShare}</option>
+														))}
+													</select>
+													<div className="flex justify-end gap-2">
+														<button onClick={() => setShowCopyWebhook(false)} className="px-4 py-2 text-sm border rounded-lg">Hủy</button>
+														<button onClick={handleCopyWebhooks} disabled={!copyTarget || copyingWebhooks} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg disabled:opacity-50">
+															{copyingWebhooks ? 'Đang sao chép...' : 'Sao chép'}
+														</button>
+													</div>
+												</div>
+											</div>
+										)}
 
 										{/* Add/Edit Modal */}
 										{showAddWebhook && (
