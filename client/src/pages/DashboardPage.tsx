@@ -61,6 +61,7 @@ export const DashboardPage: React.FC = () => {
 
 	const [recentTransactions, setRecentTransactions] = useState<Transaction[]>([]);
 	const [loading, setLoading] = useState(true);
+	const [unhealthyWorkflows, setUnhealthyWorkflows] = useState<any[]>([]);
 
 	const [timeRange, setTimeRange] = useState<TimeRange>('month');
 	const [customStart, setCustomStart] = useState<string>(''); // YYYY-MM-DD
@@ -118,7 +119,9 @@ export const DashboardPage: React.FC = () => {
 			// 1. Workflows
 			const wfRes = await apiFetch('/api/workflows');
 			const wfData = await wfRes.json();
-			const activeWf = wfData.workflows ? wfData.workflows.filter((w: any) => w.status === 'RUNNING').length : 0;
+			const workflows = wfData.workflows || [];
+			const activeWf = workflows.filter((w: any) => w.status === 'active').length;
+			setUnhealthyWorkflows(workflows.filter((w: any) => w.status === 'active' && w.healthStatus !== 'healthy'));
 
 			// 2. Stats with Date Range
 			const query = new URLSearchParams({
@@ -207,6 +210,15 @@ export const DashboardPage: React.FC = () => {
 
 	return (
 		<div className="p-8 max-w-[1600px] mx-auto space-y-8 animate-in fade-in duration-500">
+			{unhealthyWorkflows.length > 0 && (
+				<div className="rounded-xl border border-amber-200 bg-amber-50 text-amber-900 p-4 flex items-start gap-3">
+					<AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+					<div>
+						<div className="font-semibold">Có {unhealthyWorkflows.length} tài khoản cần kiểm tra</div>
+						<div className="text-sm mt-1">Hệ thống chưa ghi nhận đồng bộ thành công gần đây hoặc đang gặp lỗi liên tiếp. Mở “Kết nối ngân hàng” để xem chi tiết.</div>
+					</div>
+				</div>
+			)}
 			{/* Header with Filters */}
 			<div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
 				<div>

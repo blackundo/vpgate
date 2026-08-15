@@ -8,6 +8,9 @@ interface Workflow {
 	runId: string;
 	status: string;
 	startTime: string;
+	healthStatus: 'healthy' | 'delayed' | 'sync_error' | 'initializing' | 'paused';
+	lastSyncSuccessAt?: string | null;
+	lastSyncError?: string | null;
 }
 
 export const WorkflowListPage: React.FC = () => {
@@ -52,6 +55,14 @@ export const WorkflowListPage: React.FC = () => {
 			default: return <AlertCircle className="w-4 h-4" />;
 		}
 	};
+
+	const healthLabel = (health: Workflow['healthStatus']) => ({
+		healthy: 'Đồng bộ bình thường',
+		delayed: 'Đồng bộ đang chậm',
+		sync_error: 'Đồng bộ đang lỗi',
+		initializing: 'Đang chờ đồng bộ đầu tiên',
+		paused: 'Đã tạm dừng',
+	}[health] || 'Chưa rõ trạng thái');
 
 	return (
 		<div className="p-8 max-w-7xl mx-auto">
@@ -125,9 +136,12 @@ export const WorkflowListPage: React.FC = () => {
 							</div>
 
 							{/* Footer Info */}
+							<div className={`text-xs rounded-lg px-3 py-2 ${wf.healthStatus === 'healthy' ? 'bg-emerald-50 text-emerald-700' : wf.healthStatus === 'sync_error' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}`}>
+								{healthLabel(wf.healthStatus)}{wf.lastSyncError && wf.healthStatus === 'sync_error' ? `: ${wf.lastSyncError}` : ''}
+							</div>
 							<div className="flex items-center text-xs text-gray-400 gap-1.5 mt-4 pt-4 border-t border-gray-50">
-								<span className="w-2 h-2 rounded-full bg-green-500"></span>
-								Cập nhật: {new Date(wf.startTime).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', second: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' })}
+								<span className={`w-2 h-2 rounded-full ${wf.healthStatus === 'healthy' ? 'bg-green-500' : 'bg-amber-500'}`}></span>
+								Đồng bộ gần nhất: {wf.lastSyncSuccessAt ? new Date(wf.lastSyncSuccessAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : 'chưa có'}
 							</div>
 						</div>
 					))}

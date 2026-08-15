@@ -526,6 +526,12 @@ export class VpbankService {
       createdAt: s.createdAt.getTime(),
       status: s.status,
       lastListenerActivity: Number(s.lastListenerActivity),
+      lastFcmConnectedAt: s.lastFcmConnectedAt,
+      lastFcmMessageAt: s.lastFcmMessageAt,
+      lastSyncAttemptAt: s.lastSyncAttemptAt,
+      lastSyncSuccessAt: s.lastSyncSuccessAt,
+      lastSyncError: s.lastSyncError,
+      consecutiveSyncFailures: s.consecutiveSyncFailures,
       runId: s.runId
     };
   }
@@ -827,6 +833,7 @@ export class VpbankService {
   ): Promise<{ newTransactions: any[]; status: string; error?: string }> {
     try {
       const { jwt, keyShare, pinShare } = sessionData;
+	  await this.recordSyncAttempt(keyShare);
       const accountNumber = sessionData.accountNumber || 'all';
 
       const res = await this.getNotifications(jwt, keyShare, pinShare, accountNumber);
@@ -838,13 +845,16 @@ export class VpbankService {
           rawStr.includes('Unauthorized') ||
           rawStr.includes('Session expired')
         ) {
+		  await this.recordSyncFailure(keyShare, 'API returned 401/Unauthorized');
           return { newTransactions: [], status: 'AUTH_FAILED', error: 'API returned 401/Unauthorized' };
         }
+		await this.recordSyncFailure(keyShare, `API Error: ${rawStr}`);
         return { newTransactions: [], status: 'ERROR', error: `API Error: ${rawStr}` };
       }
 
       const json = res.raw;
       if (!json?.d) {
+		await this.recordSyncSuccess(keyShare);
         return { newTransactions: [], status: 'SUCCESS' };
       }
 
@@ -961,10 +971,44 @@ export class VpbankService {
         console.warn('[SyncTransactions] Skipping socket emit: session has no userId (legacy?)');
       }
 
+	  await this.recordSyncSuccess(keyShare);
       return { newTransactions, status: 'SUCCESS' };
     } catch (err: any) {
+	  await this.recordSyncFailure(sessionData.keyShare, err?.message || String(err));
       return { newTransactions: [], status: 'ERROR', error: err?.message || String(err) };
     }
+  }
+
+  private async recordSyncSuccess(keyShare: string): Promise<void> {
+	try {
+	  await this.sessionRepo.update(keyShare, {
+		lastSyncSuccessAt: new Date(),
+		lastSyncError: null,
+		consecutiveSyncFailures: 0,
+	  });
+	} catch (error) {
+	  console.error('[SyncHealth] Failed to record successful sync:', error);
+	}
+  }
+
+  private async recordSyncFailure(keyShare: string, error: string): Promise<void> {
+	try {
+	  const session = await this.sessionRepo.findByKeyShare(keyShare);
+	  await this.sessionRepo.update(keyShare, {
+		lastSyncError: error.slice(0, 1000),
+		consecutiveSyncFailures: (session?.consecutiveSyncFailures || 0) + 1,
+	  });
+	} catch (healthError) {
+	  console.error('[SyncHealth] Failed to record sync error:', healthError);
+	}
+  }
+
+  private async recordSyncAttempt(keyShare: string): Promise<void> {
+	try {
+	  await this.sessionRepo.update(keyShare, { lastSyncAttemptAt: new Date() });
+	} catch (error) {
+	  console.error('[SyncHealth] Failed to record sync attempt:', error);
+	}
   }
 
   /**
