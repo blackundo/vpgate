@@ -1,4 +1,4 @@
-import { proxyActivities, setHandler, condition, patched } from '@temporalio/workflow';
+import { proxyActivities, setHandler, condition, continueAsNew, patched } from '@temporalio/workflow';
 import {
     AccountSession,
     AccountActivities,
@@ -65,23 +65,30 @@ const ensureFCMListenerRunning = async (keyShare: KeyShare): Promise<'CONNECTED'
 export default async function VPBankAccountWorkflow(initialSession: AccountSession) {
     let session = initialSession;
 
-    let status: AccountWorkflowStatus = 'active';
+    let status: AccountWorkflowStatus = initialSession.status === 'paused' ? 'paused' : 'active';
     let lastPollTime = 0;
     let eventProcessedCount = 0;
+    let historyCycles = 0;
 
     const isRunning = () => status === 'active';
     const getStatus = (): AccountWorkflowStatus => status as AccountWorkflowStatus;
     let signalQueues: BalanceChangeEventPayload[] = [];
     const keyShare = session.keyShare;
     const reconciliationInterval = '2 minutes';
+    // Each reconciliation adds several events to Temporal history. Rolling over
+    // well before the server limit prevents long-running accounts from closing
+    // when their history reaches ~51k events.
+    const maxHistoryCycles = 1_000;
     console.log(`[Workflow] Workflow started for ${keyShare}`);
-    try {
-        await startFCMListener(keyShare);
-    } catch (error) {
-        // FCM is an acceleration signal, not a requirement for transaction sync.
-        // Periodic reconciliation below keeps the account up to date when the
-        // reverse-engineered FCM transport is unavailable.
-        console.warn(`[Workflow] FCM listener failed for ${keyShare}; continuing with periodic sync`, error);
+    if (status === 'active') {
+        try {
+            await startFCMListener(keyShare);
+        } catch (error) {
+            // FCM is an acceleration signal, not a requirement for transaction sync.
+            // Periodic reconciliation below keeps the account up to date when the
+            // reverse-engineered FCM transport is unavailable.
+            console.warn(`[Workflow] FCM listener failed for ${keyShare}; continuing with periodic sync`, error);
+        }
     }
 
     setHandler(fcmEventSignal, (payload: BalanceChangeEventPayload) => {
@@ -129,8 +136,9 @@ export default async function VPBankAccountWorkflow(initialSession: AccountSessi
     // Temporal patching keeps replay deterministic for workflows that were
     // already running before periodic reconciliation was introduced.
     const periodicReconciliationEnabled = patched('periodic-reconciliation-v1');
+    const continueAsNewEnabled = patched('workflow-continue-as-new-v1');
 
-    if (periodicReconciliationEnabled) {
+    if (periodicReconciliationEnabled && isRunning()) {
         // Catch up transactions that arrived while the worker was unavailable.
         await syncTransactions('startup');
     }
@@ -149,6 +157,11 @@ export default async function VPBankAccountWorkflow(initialSession: AccountSessi
 
         if (!isRunning()) {
             console.log(`[Workflow] Reconciliation skipped while paused for ${keyShare}`);
+            historyCycles += 1;
+            if (continueAsNewEnabled && historyCycles >= maxHistoryCycles) {
+                console.log(`[Workflow] Continuing as new for ${keyShare}; status=${status}, cycles=${historyCycles}`);
+                await continueAsNew<typeof VPBankAccountWorkflow>({ ...session, status });
+            }
             continue;
         }
 
@@ -157,6 +170,12 @@ export default async function VPBankAccountWorkflow(initialSession: AccountSessi
         // Coalesce all queued FCM signals into one idempotent reconciliation.
         signalQueues.length = 0;
         await syncTransactions(reason);
+        historyCycles += 1;
+
+        if (continueAsNewEnabled && historyCycles >= maxHistoryCycles) {
+            console.log(`[Workflow] Continuing as new for ${keyShare}; status=${status}, cycles=${historyCycles}`);
+            await continueAsNew<typeof VPBankAccountWorkflow>({ ...session, status });
+        }
     }
 
     console.log(`[Workflow] Stopping FCM listener for ${keyShare}`);
