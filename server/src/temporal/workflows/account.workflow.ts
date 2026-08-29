@@ -67,7 +67,6 @@ export default async function VPBankAccountWorkflow(initialSession: AccountSessi
 
     let status: AccountWorkflowStatus = initialSession.status === 'paused' ? 'paused' : 'active';
     let lastPollTime = 0;
-    let eventProcessedCount = 0;
     let historyCycles = 0;
 
     const isRunning = () => status === 'active';
@@ -75,10 +74,9 @@ export default async function VPBankAccountWorkflow(initialSession: AccountSessi
     let signalQueues: BalanceChangeEventPayload[] = [];
     const keyShare = session.keyShare;
     const reconciliationInterval = '2 minutes';
-    // Each reconciliation adds several events to Temporal history. Rolling over
-    // well before the server limit prevents long-running accounts from closing
-    // when their history reaches ~51k events.
-    const maxHistoryCycles = 1_000;
+    // Each reconciliation adds several events to Temporal history. Rotate the
+    // run well before the server-side history limit is reached.
+    const maxHistoryCycles = 500;
     console.log(`[Workflow] Workflow started for ${keyShare}`);
     if (status === 'active') {
         try {
@@ -126,7 +124,6 @@ export default async function VPBankAccountWorkflow(initialSession: AccountSessi
 
         if (result.status === 'SUCCESS') {
             lastPollTime = Date.now();
-            eventProcessedCount += result.newTransactions.length;
             if (result.newTransactions.length > 0) {
                 await dispatchWebhooks(result.newTransactions, keyShare);
             }
