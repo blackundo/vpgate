@@ -11,7 +11,7 @@ export const createAccountActivities = (): AccountActivities => ({
   async validateSession(
     session: AccountSession
   ): Promise<{ isValid: boolean; session?: AccountSession; error?: string }> {
-    const res = await vpbankService.validateShare(session.keyShare, session.pinShare, session.fcmToken);
+    const res = await vpbankService.validateShare(session.keyShare, session.pinShare, session.fcmToken, session.userId);
 
     if (res.status === '1' && res.jwt) {
       return {
@@ -29,6 +29,7 @@ export const createAccountActivities = (): AccountActivities => ({
   async fetchAndSaveTransactions(session: AccountSession): Promise<SyncResult> {
     try {
       const result = await vpbankService.syncTransactions({
+         userId: session.userId,
          keyShare: session.keyShare,
          pinShare: session.pinShare,
          jwt: session.jwt,

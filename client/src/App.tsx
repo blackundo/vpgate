@@ -16,6 +16,7 @@ import { ProfilePage } from './pages/auth/ProfilePage';
 import { DashboardPage } from './pages/DashboardPage';
 import { SessionExpiredModal } from './components/SessionExpiredModal';
 import { SoundUnlockBanner } from './components/SoundUnlockBanner';
+import { RelaySettingsPage } from './pages/RelaySettingsPage';
 
 
 const App: React.FC = () => {
@@ -57,6 +58,7 @@ const App: React.FC = () => {
 				{ path: 'transactions', element: <TransactionsPage /> },
 				{ path: 'webhooks', element: <WebhookLogsPage /> },
 				{ path: 'create', element: <CreateWorkflowPage /> },
+				{ path: 'relay', element: <RelaySettingsPage /> },
 
 				{ path: 'workflows/:id', element: <WorkflowDetailPage /> },
 			],

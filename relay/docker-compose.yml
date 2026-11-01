@@ -1,0 +1,10 @@
+services:
+  vpbank-relay:
+    build: .
+    container_name: vpbank-relay
+    restart: unless-stopped
+    environment:
+      PORT: 8787
+      RELAY_SECRET: ${RELAY_SECRET:?Set RELAY_SECRET in .env}
+    ports:
+      - "${RELAY_BIND_IP:-0.0.0.0}:${RELAY_PORT:-8787}:8787"

@@ -7,12 +7,14 @@ import { TransactionRepository } from '../repositories/transaction.repository';
 import { WebhookRepository } from '../repositories/webhook.repository';
 import { sequelize } from '../db/sequelize';
 import { startWorkflowForSession } from './workflow.service';
+import { vpbankRelayService } from './vpbank-relay.service';
 
 dotenv.config();
 
 const VPB_CONTEXT_PATH = process.env.VPBANK_CONTEXT_PATH || 'https://neo.vpbank.com.vn';
 
 export interface VpbankSession {
+  userId?: string;
   keyShare: string;
   pinShare: string;
   jwt: string;
@@ -219,6 +221,7 @@ export class VpbankService {
             } catch { }
 
             const sessionForWorkflow = {
+              userId: session.userId,
               keyShare: session.keyShare,
               pinShare: session.pinShare,
               jwt: session.jwt || '',
@@ -241,7 +244,7 @@ export class VpbankService {
     }
   }
 
-  async validateShare(keyShare: string, pinShare: string, tokenFb?: string): Promise<VpbankValidateResult> {
+  async validateShare(keyShare: string, pinShare: string, tokenFb?: string, userId?: string): Promise<VpbankValidateResult> {
     const url = `${this.baseUrl}/cb/odata/ns/authenticationservice/ValidationNonSecureNotificationShare?KeyShare='${encodeURIComponent(
       keyShare
     )}'&PinShare='${encodeURIComponent(pinShare)}'`;
@@ -267,7 +270,7 @@ export class VpbankService {
       headers.TokenFB = effectiveToken;
     }
 
-    const res = await fetch(url, { method: 'GET', headers });
+    const res = await vpbankRelayService.fetch(url, { method: 'GET', headers }, userId);
     if (!res.ok) {
       return { status: 'error', raw: await safeJson(res) };
     }
@@ -280,10 +283,10 @@ export class VpbankService {
     };
   }
 
-  async getNotifications(authKey: string, keyShare: string, pinShare: string, accountNumber: string) {
+  async getNotifications(authKey: string, keyShare: string, pinShare: string, accountNumber: string, userId?: string) {
     const url = `${this.baseUrl}/cb/odata/ns/authenticationservice/GetNonSecureNotificationShare?KeyShare='${encodeURIComponent(keyShare)}'&PinShare='${encodeURIComponent(pinShare)}'&AccountNumber='${encodeURIComponent(accountNumber)}'`;
 
-    const res = await fetch(url, {
+    const res = await vpbankRelayService.fetch(url, {
       method: 'GET',
       headers: {
         Accept: 'application/json',
@@ -291,7 +294,7 @@ export class VpbankService {
         AuthKey: authKey,
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
       },
-    });
+    }, userId);
 
     if (!res.ok) return { ok: false, raw: await safeJson(res) };
     const json = (await res.json()) as any;
@@ -313,7 +316,7 @@ export class VpbankService {
     } catch { }
 
     if (!activeJwt) {
-      const validation = await this.validateShare(keyShare, pinShare, tokenFb);
+      const validation = await this.validateShare(keyShare, pinShare, tokenFb, userId);
       if (validation.status !== '1' || !validation.jwt) {
         throw new Error(`VPBank Registration Failed: Status=${validation.status} Raw=${JSON.stringify(validation.raw)}`);
       }
@@ -387,6 +390,7 @@ export class VpbankService {
 
     try {
       const sessionForWorkflow = {
+        userId,
         keyShare: session!.keyShare,
         pinShare: session!.pinShare,
         jwt: session!.jwt || '',
@@ -882,7 +886,12 @@ export class VpbankService {
 	  await this.recordSyncAttempt(keyShare);
       const accountNumber = sessionData.accountNumber || 'all';
 
-      const res = await this.getNotifications(jwt, keyShare, pinShare, accountNumber);
+      let userId = sessionData.userId;
+      if (!userId) {
+        const storedSession = await this.sessionRepo.findByKeyShare(keyShare);
+        userId = storedSession?.userId;
+      }
+      const res = await this.getNotifications(jwt, keyShare, pinShare, accountNumber, userId);
 
       if (!res.ok) {
         const rawStr = JSON.stringify(res.raw || {});

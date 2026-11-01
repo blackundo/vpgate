@@ -14,6 +14,7 @@ export interface BalanceChangeEventPayload {
 }
 
 export interface AccountSession {
+  userId?: string;
   keyShare: string;
   pinShare: string;
   jwt: string;

@@ -13,7 +13,10 @@ router.get('/health', (req, res) => res.json({ status: 'ok', timestamp: Date.now
 
 router.post('/auth/firebase', authLimiter, loginWithFirebase);
 
-router.post('/bank/vpbank/validate-share', authLimiter, validate(Schemas.RegisterListener), VpbankController.validateShare);
+router.post('/bank/vpbank/validate-share', authLimiter, requireAuth, validate(Schemas.RegisterListener), VpbankController.validateShare);
+router.get('/vpbank/relay-config', requireAuth, VpbankController.getRelayConfig);
+router.put('/vpbank/relay-config', requireAuth, VpbankController.updateRelayConfig);
+router.post('/vpbank/relay-config/test', requireAuth, VpbankController.testRelayConfig);
 router.get('/bank/vpbank/notifications', requireAuth, VpbankController.getNotifications);
 router.get('/bank/vpbank/check-sound', requireAuth, VpbankController.checkSound);
 router.post('/bank/vpbank/toggle-sound', requireAuth, VpbankController.toggleSound);

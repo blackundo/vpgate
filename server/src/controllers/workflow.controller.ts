@@ -273,7 +273,7 @@ export const updateCredentials = async (req: Request, res: Response) => {
     // registration, which also replaces stale encryption material.
     const fcm = new AccountFCMService(keyShare);
     const credentials = await fcm.getCredentials();
-    const validation = await vpbankService.validateShare(keyShare, pinShare, credentials.fcm.token);
+    const validation = await vpbankService.validateShare(keyShare, pinShare, credentials.fcm.token, userId);
     if (validation.status !== '1' || !validation.jwt) {
       return res.status(400).json({ error: 'VPBank rejected the new Key Share or PIN Share' });
     }
@@ -322,6 +322,7 @@ export const updateCredentials = async (req: Request, res: Response) => {
     }
 
     const runId = await startWorkflowForSession({
+      userId,
       keyShare,
       pinShare,
       jwt: validation.jwt,

@@ -11,7 +11,10 @@ export class PreferenceService {
 
   /** Get all preferences for the given user (scoped by userId). */
   async getAll(userId: string): Promise<Record<string, any>> {
-    return await this.repo.getAllByUserId(userId);
+    const prefs = await this.repo.getAllByUserId(userId);
+    // Secrets are available only through their dedicated masked endpoint.
+    delete prefs.vpbankRelay;
+    return prefs;
   }
 
   /** Get one preference for the given user. */

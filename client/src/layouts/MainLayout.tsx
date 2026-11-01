@@ -1,6 +1,6 @@
 import React from 'react';
 import { Outlet, NavLink, Link } from 'react-router-dom';
-import { LayoutDashboard, GitBranch, PlusCircle, Activity, Globe, Link as LinkIcon } from 'lucide-react';
+import { LayoutDashboard, GitBranch, PlusCircle, Activity, Globe, Link as LinkIcon, Network } from 'lucide-react';
 
 const QUICK_LINK_URL = 'https://vietqr.xyz/create-link.html';
 
@@ -11,6 +11,7 @@ export const MainLayout: React.FC = () => {
 		{ path: '/transactions', label: 'Lịch sử giao dịch', icon: Activity },
 		{ path: '/webhooks', label: 'Lịch sử Webhook', icon: Globe },
 		{ path: '/create', label: 'Thêm kết nối', icon: PlusCircle },
+		{ path: '/relay', label: 'VPBank Relay', icon: Network },
 	];
 
 	return (

@@ -2,14 +2,43 @@ import { Request, Response } from 'express';
 import { vpbankService } from '../services/vpbank.service';
 import { preferenceService } from '../services/preference.service';
 import { socketService } from '../services/socket.service';
+import { vpbankRelayService } from '../services/vpbank-relay.service';
 
 export const validateShare = async (req: Request, res: Response) => {
     try {
+        if (!req.user) throw new Error('User not authenticated');
         const { keyShare, pinShare, tokenFb } = req.body;
-        const result = await vpbankService.validateShare(keyShare, pinShare, tokenFb);
+        const result = await vpbankService.validateShare(keyShare, pinShare, tokenFb, req.user.id);
         res.json(result);
     } catch (error: any) {
         res.status(500).json({ status: 'error', message: error.message });
+    }
+};
+
+export const getRelayConfig = async (req: Request, res: Response) => {
+    try {
+        if (!req.user) throw new Error('User not authenticated');
+        res.json(await vpbankRelayService.getPublicConfig(req.user.id));
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+export const updateRelayConfig = async (req: Request, res: Response) => {
+    try {
+        if (!req.user) throw new Error('User not authenticated');
+        res.json(await vpbankRelayService.saveConfig(req.user.id, req.body));
+    } catch (error: any) {
+        res.status(400).json({ error: error.message });
+    }
+};
+
+export const testRelayConfig = async (req: Request, res: Response) => {
+    try {
+        if (!req.user) throw new Error('User not authenticated');
+        res.json(await vpbankRelayService.test(req.user.id));
+    } catch (error: any) {
+        res.status(502).json({ ok: false, error: error.message });
     }
 };
 

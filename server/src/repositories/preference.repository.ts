@@ -14,6 +14,17 @@ export class PreferenceRepository {
   }
 
   async set(sessionId: string | null, key: string, value: any, options?: { transaction?: Transaction }): Promise<void> {
+    // PostgreSQL treats NULL values as distinct in unique indexes, so upsert
+    // cannot detect a conflict for user-scoped preferences (session_id=NULL).
+    if (sessionId === null) {
+      const existing = await Preference.findOne({ where: { sessionId: null, key }, transaction: options?.transaction });
+      if (existing) {
+        await existing.update({ value }, { transaction: options?.transaction });
+      } else {
+        await Preference.create({ sessionId: null, key, value }, { transaction: options?.transaction });
+      }
+      return;
+    }
     await Preference.upsert({
       sessionId,
       key,
